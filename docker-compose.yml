@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    container_name: pyspark-recsys
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./:/app
+    environment:
+      - PYSPARK_PYTHON=python
+      - STREAMLIT_SERVER_HEADLESS=true
+    command: streamlit run app/streamlit_app.py --server.address=0.0.0.0

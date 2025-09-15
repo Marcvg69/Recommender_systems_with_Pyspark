@@ -1,0 +1,15 @@
+paths:
+  ratings_csv: data/sample/ratings_sample.csv
+  movies_csv: data/sample/movies_sample.csv
+  model_dir: models/als
+
+model:
+  als:
+    rank: 50
+    regParam: 0.05
+    maxIter: 10
+    coldStartStrategy: "drop"
+    userCol: "userId"
+    itemCol: "movieId"
+    ratingCol: "rating"
+    implicitPrefs: false
