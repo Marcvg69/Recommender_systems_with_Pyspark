@@ -1,0 +1,85 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test-train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up Java (for PySpark)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install pyspark pandas numpy streamlit ruff pytest
+          fi
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Unit tests
+        run: pytest -q
+
+      - name: Generate tiny sample data
+        run: |
+          python - << 'PY'
+          import os, csv, random, time, pathlib
+          pathlib.Path("data/sample").mkdir(parents=True, exist_ok=True)
+          movies=[(i, f"Movie {i}", "Drama|Action") for i in range(1,301)]
+          with open("data/sample/movies_sample.csv","w",newline="") as f:
+              w=csv.writer(f); w.writerow(["movieId","title","genres"]); w.writerows(movies)
+          rows=[]; rng=random.Random(42)
+          for u in range(1,51):
+              for _ in range(15):
+                  rows.append([u, rng.randint(1,300), rng.choice([2.5,3,3.5,4,4.5,5]), int(time.time())])
+          with open("data/sample/ratings_sample.csv","w",newline="") as f:
+              w=csv.writer(f); w.writerow(["userId","movieId","rating","timestamp"]); w.writerows(rows)
+          print("Wrote sample CSVs")
+          PY
+
+      - name: Smoke train (fast)
+        env:
+          SPARK_DRIVER_MEMORY: 1g
+        run: |
+          python -m src.models.tune_als \
+            --ratings_csv data/sample/ratings_sample.csv \
+            --model_out models/als_best \
+            --ranks 8,16 \
+            --regParams 0.05 \
+            --maxIter 2 \
+            --sims_topN 5 \
+            --sims_method driver \
+            --driver_batch 64 \
+            --shuffle_partitions 8
+
+      - name: Upload artifacts (model + sims)
+        uses: actions/upload-artifact@v4
+        with:
+          name: als_smoke_artifacts
+          path: |
+            models/als_best/**
+            data/processed/item_sims/**
+          if-no-files-found: ignore
