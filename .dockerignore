@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__/
+*.pyc
+data/raw/*
+!data/raw/ml-latest-small/README.txt
+models/
+docs/_build/
+dist/
+build/
+.DS_Store
+.env

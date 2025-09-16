@@ -1,17 +1,35 @@
-.PHONY: docker app
+.PHONY: build train train-full up down logs bash clean
 
-docker:
-	docker build -t pyspark-recsys .
-	docker run -p 8501:8501 pyspark-recsys
+build:
+	docker compose build --no-cache
 
-app:
-	streamlit run app/streamlit_app.py
+train:
+	# Train on sample (fast)
+	docker compose run --rm app bash -lc "\
+	 python -m src.models.train_als \
+	   --ratings_csv data/sample/ratings_sample.csv \
+	   --movies_csv  data/sample/movies_sample.csv \
+	   --model_dir   models/als"
 
-docker-build:
-	docker compose build
+train-full:
+	# Train on full MovieLens small
+	docker compose run --rm app bash -lc "\
+	 python -m src.models.train_als \
+	   --ratings_csv data/raw/ml-latest-small/ratings.csv \
+	   --movies_csv  data/raw/ml-latest-small/movies.csv \
+	   --model_dir   models/als"
 
-docker-up:
+up:
 	docker compose up
 
-docker-down:
-	docker compose down
+down:
+	docker compose down -v --remove-orphans
+
+logs:
+	docker compose logs -f app
+
+bash:
+	docker compose run --rm app bash
+
+clean:
+	rm -rf models/als models/als_best

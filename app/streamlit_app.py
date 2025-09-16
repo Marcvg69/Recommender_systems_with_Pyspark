@@ -1,43 +1,57 @@
 import streamlit as st
 import pandas as pd
+
 from src.models.infer_recommendations import recommend_for_favorites
-from src.utils.io import load_config
+from src.utils.io import load_movies_csv
 
-st.set_page_config(page_title="PySpark Recommender", layout="centered")
+# Defaults: use full dataset + your saved ALS model
+MOVIES_CSV_DEFAULT = "data/raw/ml-latest-small/movies.csv"
+MODEL_DIR_DEFAULT = "models/als"
 
-st.title("🎬 Movie Recommender (PySpark ALS)")
+st.set_page_config(page_title="Movie Recommender (PySpark ALS)", layout="wide")
 
-cfg = load_config()
-movies_csv = cfg["paths"]["movies_csv"]
-model_dir = cfg["paths"]["model_dir"]
-
-st.sidebar.header("Data & Model")
-st.sidebar.write(f"Movies CSV: `{movies_csv}`")
-st.sidebar.write(f"Model dir: `{model_dir}`")
-
-st.write("Type a few favourite movie titles and press **Recommend**.")
-
-# Load movie titles for selection
 @st.cache_data
-def load_titles(path):
-    df = pd.read_csv(path)
-    return sorted(df["title"].dropna().unique().tolist())
+def cached_titles(movies_csv: str):
+    """Cache the titles list for a given CSV path."""
+    df = load_movies_csv(movies_csv)
+    if isinstance(df, pd.DataFrame) and "title" in df.columns:
+        return df["title"].dropna().astype(str).unique().tolist()
+    # Fallback if util returns a list already
+    return sorted({str(x) for x in df})
 
-titles = load_titles(movies_csv)
+def main():
+    st.title("🎬 Movie Recommender (PySpark ALS)")
+    st.write("Type a few favourite titles and press **Recommend**.")
 
-favorites = st.multiselect("Select 2–5 favourites:", options=titles, default=titles[:2] if titles else [])
+    with st.sidebar:
+        st.header("Data & Model")
+        movies_csv = st.text_input("Movies CSV:", MOVIES_CSV_DEFAULT)
+        model_dir = st.text_input("Model dir:", MODEL_DIR_DEFAULT)
 
-top_k = st.slider("How many recommendations?", 5, 30, 10, step=1)
+    titles = cached_titles(movies_csv)
 
-if st.button("Recommend"):
-    if len(favorites) < 1:
-        st.warning("Please add at least one favourite title.")
-    else:
-        with st.spinner("Computing recommendations..."):
-            try:
-                recs = recommend_for_favorites(model_dir=model_dir, movies_csv=movies_csv, favorites=favorites, top_k=top_k)
-                st.subheader("Recommendations")
-                df = pd.DataFrame(recs, columns=["title","similarity"])
-                st.dataframe(df)
-            except Exception as e:
-                st.error(str(e))
+    selected = st.multiselect(
+        "Select 2–5 favourites:",
+        options=titles,
+        max_selections=5,
+    )
+    k = st.slider("How many recommendations?", min_value=1, max_value=50, value=10)
+
+    if st.button("Recommend", type="primary"):
+        if len(selected) < 2:
+            st.warning("Pick at least two favourites.")
+            return
+
+        # Use your existing inference helper (keeps internal logic intact)
+        recs = recommend_for_favorites(movies_csv, model_dir, selected, k)
+
+        # Be tolerant to return type (df / list[dict] / list[tuple])
+        if hasattr(recs, "to_dict"):
+            st.dataframe(recs)
+        elif isinstance(recs, list):
+            st.dataframe(pd.DataFrame(recs))
+        else:
+            st.write(recs)
+
+if __name__ == "__main__":
+    main()

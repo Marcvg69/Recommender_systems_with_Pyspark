@@ -1,12 +1,15 @@
 services:
   app:
     build: .
-    container_name: pyspark-recsys
     ports:
       - "8501:8501"
     volumes:
-      - ./:/app
+      - .:/app
+    working_dir: /app
+    init: true
     environment:
-      - PYSPARK_PYTHON=python
-      - STREAMLIT_SERVER_HEADLESS=true
-    command: streamlit run app/streamlit_app.py --server.address=0.0.0.0
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app     # so 'src' imports work when Streamlit runs from /app/app
+    command: bash -lc "streamlit run app/streamlit_app.py --server.port 8501 --server.address 0.0.0.0"
+    # If Spark misbehaves on Apple Silicon, you may force x86:
+    # platform: linux/amd64
