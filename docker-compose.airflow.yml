@@ -1,0 +1,10 @@
+version: "3.8"
+services:
+  airflow-webserver:
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor   # was LocalExecutor
+      REPO_DIR: /opt/airflow/repo
+  airflow-scheduler:
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor   # was LocalExecutor
+      REPO_DIR: /opt/airflow/repo

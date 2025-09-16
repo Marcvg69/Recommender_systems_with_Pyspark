@@ -1,15 +1,13 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    volumes:
+      - ./:/app
+    environment:
+      - PYSPARK_PYTHON=python
+    # expose ports only when you run Streamlit from this service
     ports:
       - "8501:8501"
-    volumes:
-      - .:/app
-    working_dir: /app
-    init: true
-    environment:
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app     # so 'src' imports work when Streamlit runs from /app/app
-    command: bash -lc "streamlit run app/streamlit_app.py --server.port 8501 --server.address 0.0.0.0"
-    # If Spark misbehaves on Apple Silicon, you may force x86:
-    # platform: linux/amd64
