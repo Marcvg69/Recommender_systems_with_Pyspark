@@ -1,0 +1,6 @@
+# Dev/test-only dependencies. Not needed at runtime.
+ruff==0.6.8
+pytest>=7.4,<9
+# optional but handy:
+# black==24.8.0
+# pytest-cov>=4.1,<6

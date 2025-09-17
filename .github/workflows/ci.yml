@@ -20,22 +20,20 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Cache pip based on BOTH files
       - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      # Install runtime + dev deps (ruff, pytest, etc.)
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          else
-            pip install pyspark pandas numpy streamlit ruff pytest
-          fi
+          pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Lint
         run: ruff check .
