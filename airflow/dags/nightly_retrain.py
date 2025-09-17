@@ -1,58 +1,59 @@
 # airflow/dags/nightly_retrain.py
-import os
-import pathlib
+from __future__ import annotations
+
 import pendulum
-from datetime import datetime
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
-# ---- Paths & timezone --------------------------------------------------------
-TZ = pendulum.timezone("Europe/Brussels")
+default_args = {
+    "owner": "airflow",
+    "retries": 2,
+}
 
-# Auto-detect repo root if Airflow runs from <repo>/airflow/dags/nightly_retrain.py
-# Option B (Airflow in Docker): override via env: REPO_DIR=/opt/airflow/repo
-DEFAULT_REPO_DIR = str(pathlib.Path(__file__).resolve().parents[2])  # <repo>
-REPO_DIR = os.environ.get("REPO_DIR", DEFAULT_REPO_DIR)
+with DAG(
+    dag_id="nightly_retrain_als",
+    description="Merge feedback and retrain ALS nightly",
+    default_args=default_args,
+    start_date=pendulum.datetime(2025, 1, 1, tz="UTC"),
+    schedule="15 2 * * *",  # 02:15
+    catchup=False,
+    tags=["ml", "als", "retrain"],
+) as dag:
 
-# Data locations relative to REPO_DIR
-DEFAULT_RATINGS = "data/raw/ratings.csv"
-FEEDBACK = "data/feedback/ratings_feedback.csv"
-MERGED = "data/working/ratings_merged.csv"
-
-# Spark memory (can override via env on the Airflow worker if needed)
-SPARK_DRIVER_MEMORY = os.environ.get("SPARK_DRIVER_MEMORY", "2g")
-
-# ---- Commands ---------------------------------------------------------------
-# Merge base ratings + feedback (if exists) using inline Python (no external deps beyond pandas)
-merge_cmd = rf"""
+    merge_feedback = BashOperator(
+        task_id="merge_feedback",
+        bash_command="""
 set -euo pipefail
-cd "{REPO_DIR}"
-python - << 'PY'
-import os, pandas as pd, pathlib
-pathlib.Path("data/working").mkdir(parents=True, exist_ok=True)
-base_path = "{DEFAULT_RATINGS}"
-fb_path   = "{FEEDBACK}"
-out_path  = "{MERGED}"
-base = pd.read_csv(base_path)
-if os.path.exists(fb_path):
-    fb = pd.read_csv(fb_path)
-    df = pd.concat([base[['userId','movieId','rating','timestamp']], fb], ignore_index=True)
-else:
-    df = base
-df.to_csv(out_path, index=False)
-print(f"Wrote merged ratings to {{out_path}} (rows={{len(df)}})")
-PY
-"""
+cd "$REPO_DIR"
 
-# Train & precompute sims INSIDE your Docker 'app' service (no local Java needed)
-train_cmd = rf"""
+mkdir -p data/working
+
+# start from the canonical ratings.csv
+cp -f data/raw/ratings.csv data/working/ratings_merged.csv
+
+# append any feedback CSVs if present (skip their headers)
+shopt -s nullglob
+if compgen -G "data/feedback/*.csv" > /dev/null; then
+  for f in data/feedback/*.csv; do
+    tail -n +2 "$f" >> data/working/ratings_merged.csv || true
+  done
+fi
+""",
+    )
+
+    tune_and_save = BashOperator(
+        task_id="tune_and_save",
+        bash_command="""
 set -euo pipefail
-cd "{REPO_DIR}"
-docker compose run --rm \
-  -e SPARK_DRIVER_MEMORY={SPARK_DRIVER_MEMORY} \
-  app bash -lc '
+cd "$REPO_DIR"
+
+# Run the app service from the *host* repo so bind-mounts resolve on macOS Docker
+docker compose \
+  --project-directory "$REPO_DIR_HOST" \
+  -f "$REPO_DIR_HOST/docker-compose.yml" \
+  run --rm -e SPARK_DRIVER_MEMORY=2g app bash -lc '
 python -m src.models.tune_als \
-  --ratings_csv {MERGED} \
+  --ratings_csv data/working/ratings_merged.csv \
   --model_out models/als_best \
   --ranks 16,32,64 \
   --regParams 0.01,0.05,0.1 \
@@ -62,26 +63,7 @@ python -m src.models.tune_als \
   --driver_batch 256 \
   --shuffle_partitions 32
 '
-"""
-
-# ---- DAG --------------------------------------------------------------------
-with DAG(
-    dag_id="nightly_retrain_als",
-    description="Nightly ALS retrain + item-sim precompute (runs training inside Docker).",
-    schedule="15 2 * * *",            # 02:15 daily (Europe/Brussels)
-    start_date=datetime(2025, 9, 1, tzinfo=TZ),
-    catchup=False,
-    tags=["recsys", "als", "spark"],
-) as dag:
-
-    merge = BashOperator(
-        task_id="merge_feedback",
-        bash_command=merge_cmd,
+""",
     )
 
-    retrain = BashOperator(
-        task_id="tune_and_save",
-        bash_command=train_cmd,
-    )
-
-    merge >> retrain
+    merge_feedback >> tune_and_save

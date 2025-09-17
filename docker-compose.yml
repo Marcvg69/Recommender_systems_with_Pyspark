@@ -1,13 +1,12 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: recommender_systems_with_pyspark-app
     working_dir: /app
-    volumes:
-      - ./:/app
-    environment:
-      - PYSPARK_PYTHON=python
-    # expose ports only when you run Streamlit from this service
+    command: bash -lc "streamlit run app/streamlit_app.py --server.address=0.0.0.0 --server.port=8501"
     ports:
       - "8501:8501"
+    volumes:
+      - .:/app
+      - ./.streamlit/config.toml:/root/.streamlit/config.toml:ro  # Option A mount
+    environment:
+      - PYTHONUNBUFFERED=1

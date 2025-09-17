@@ -1,0 +1,39 @@
+[2025-09-16T14:03:01.830+0000] {local_task_job_runner.py:120} INFO - ::group::Pre task execution logs
+[2025-09-16T14:03:01.843+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: nightly_retrain_als.tune_and_save manual__2025-09-16T13:38:08+00:00 [queued]>
+[2025-09-16T14:03:01.846+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: nightly_retrain_als.tune_and_save manual__2025-09-16T13:38:08+00:00 [queued]>
+[2025-09-16T14:03:01.846+0000] {taskinstance.py:2306} INFO - Starting attempt 1 of 1
+[2025-09-16T14:03:01.854+0000] {taskinstance.py:2330} INFO - Executing <Task(BashOperator): tune_and_save> on 2025-09-16 13:38:08+00:00
+[2025-09-16T14:03:01.857+0000] {standard_task_runner.py:64} INFO - Started process 147 to run task
+[2025-09-16T14:03:01.860+0000] {standard_task_runner.py:90} INFO - Running: ['airflow', 'tasks', 'run', 'nightly_retrain_als', 'tune_and_save', 'manual__2025-09-16T13:38:08+00:00', '--job-id', '5', '--raw', '--subdir', 'DAGS_FOLDER/nightly_retrain.py', '--cfg-path', '/tmp/tmp_taonyyt']
+[2025-09-16T14:03:01.860+0000] {standard_task_runner.py:91} INFO - Job 5: Subtask tune_and_save
+[2025-09-16T14:03:01.883+0000] {task_command.py:426} INFO - Running <TaskInstance: nightly_retrain_als.tune_and_save manual__2025-09-16T13:38:08+00:00 [running]> on host 9bc3ef312961
+[2025-09-16T14:03:01.915+0000] {taskinstance.py:2648} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='airflow' AIRFLOW_CTX_DAG_ID='nightly_retrain_als' AIRFLOW_CTX_TASK_ID='tune_and_save' AIRFLOW_CTX_EXECUTION_DATE='2025-09-16T13:38:08+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2025-09-16T13:38:08+00:00'
+[2025-09-16T14:03:01.916+0000] {taskinstance.py:430} INFO - ::endgroup::
+[2025-09-16T14:03:01.925+0000] {subprocess.py:63} INFO - Tmp dir root location: /tmp
+[2025-09-16T14:03:01.925+0000] {subprocess.py:75} INFO - Running command: ['/usr/bin/bash', '-c', '\nset -euo pipefail\ncd "/opt/airflow/repo"\ndocker compose run --rm \\\n  -e SPARK_DRIVER_MEMORY=2g \\\n  app bash -lc \'\npython -m src.models.tune_als \\\n  --ratings_csv data/working/ratings_merged.csv \\\n  --model_out models/als_best \\\n  --ranks 16,32,64 \\\n  --regParams 0.01,0.05,0.1 \\\n  --maxIter 15 \\\n  --sims_topN 30 \\\n  --sims_method driver \\\n  --driver_batch 256 \\\n  --shuffle_partitions 32\n\'']
+[2025-09-16T14:03:01.930+0000] {subprocess.py:86} INFO - Output:
+[2025-09-16T14:03:02.216+0000] {subprocess.py:93} INFO - Error response from daemon: mounts denied:
+[2025-09-16T14:03:02.216+0000] {subprocess.py:93} INFO - The path /opt/airflow/repo is not shared from the host and is not known to Docker.
+[2025-09-16T14:03:02.217+0000] {subprocess.py:93} INFO - You can configure shared paths from Docker -> Preferences... -> Resources -> File Sharing.
+[2025-09-16T14:03:02.217+0000] {subprocess.py:93} INFO - See https://docs.docker.com/go/mac-file-sharing/ for more info.
+[2025-09-16T14:03:02.219+0000] {subprocess.py:97} INFO - Command exited with return code 1
+[2025-09-16T14:03:02.220+0000] {taskinstance.py:441} INFO - ::group::Post task execution logs
+[2025-09-16T14:03:02.229+0000] {taskinstance.py:2905} ERROR - Task failed with exception
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.12/site-packages/airflow/models/taskinstance.py", line 465, in _execute_task
+    result = _execute_callable(context=context, **execute_callable_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/airflow/models/taskinstance.py", line 432, in _execute_callable
+    return execute_callable(context=context, **execute_callable_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/airflow/models/baseoperator.py", line 401, in wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/airflow/operators/bash.py", line 243, in execute
+    raise AirflowException(
+airflow.exceptions.AirflowException: Bash command failed. The command returned a non-zero exit code 1.
+[2025-09-16T14:03:02.233+0000] {taskinstance.py:1206} INFO - Marking task as FAILED. dag_id=nightly_retrain_als, task_id=tune_and_save, run_id=manual__2025-09-16T13:38:08+00:00, execution_date=20250916T133808, start_date=20250916T140301, end_date=20250916T140302
+[2025-09-16T14:03:02.249+0000] {standard_task_runner.py:110} ERROR - Failed to execute job 5 for task tune_and_save (Bash command failed. The command returned a non-zero exit code 1.; 147)
+[2025-09-16T14:03:02.285+0000] {local_task_job_runner.py:243} INFO - Task exited with return code 1
+[2025-09-16T14:03:02.306+0000] {taskinstance.py:3503} INFO - 0 downstream tasks scheduled from follow-on schedule check
+[2025-09-16T14:03:02.307+0000] {local_task_job_runner.py:222} INFO - ::endgroup::

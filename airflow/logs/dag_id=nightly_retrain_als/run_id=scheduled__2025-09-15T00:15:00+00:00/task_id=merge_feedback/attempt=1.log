@@ -1,0 +1,21 @@
+[2025-09-16T14:02:24.030+0000] {local_task_job_runner.py:120} INFO - ::group::Pre task execution logs
+[2025-09-16T14:02:24.047+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: nightly_retrain_als.merge_feedback scheduled__2025-09-15T00:15:00+00:00 [queued]>
+[2025-09-16T14:02:24.049+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: nightly_retrain_als.merge_feedback scheduled__2025-09-15T00:15:00+00:00 [queued]>
+[2025-09-16T14:02:24.050+0000] {taskinstance.py:2306} INFO - Starting attempt 1 of 1
+[2025-09-16T14:02:24.059+0000] {taskinstance.py:2330} INFO - Executing <Task(BashOperator): merge_feedback> on 2025-09-15 00:15:00+00:00
+[2025-09-16T14:02:24.061+0000] {standard_task_runner.py:64} INFO - Started process 51 to run task
+[2025-09-16T14:02:24.063+0000] {standard_task_runner.py:90} INFO - Running: ['airflow', 'tasks', 'run', 'nightly_retrain_als', 'merge_feedback', 'scheduled__2025-09-15T00:15:00+00:00', '--job-id', '2', '--raw', '--subdir', 'DAGS_FOLDER/nightly_retrain.py', '--cfg-path', '/tmp/tmpghlfkchu']
+[2025-09-16T14:02:24.070+0000] {standard_task_runner.py:91} INFO - Job 2: Subtask merge_feedback
+[2025-09-16T14:02:24.105+0000] {task_command.py:426} INFO - Running <TaskInstance: nightly_retrain_als.merge_feedback scheduled__2025-09-15T00:15:00+00:00 [running]> on host 9bc3ef312961
+[2025-09-16T14:02:24.147+0000] {taskinstance.py:2648} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='airflow' AIRFLOW_CTX_DAG_ID='nightly_retrain_als' AIRFLOW_CTX_TASK_ID='merge_feedback' AIRFLOW_CTX_EXECUTION_DATE='2025-09-15T00:15:00+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='scheduled__2025-09-15T00:15:00+00:00'
+[2025-09-16T14:02:24.148+0000] {taskinstance.py:430} INFO - ::endgroup::
+[2025-09-16T14:02:24.176+0000] {subprocess.py:63} INFO - Tmp dir root location: /tmp
+[2025-09-16T14:02:24.177+0000] {subprocess.py:75} INFO - Running command: ['/usr/bin/bash', '-c', '\nset -euo pipefail\ncd "/opt/airflow/repo"\npython - << \'PY\'\nimport os, pandas as pd, pathlib\npathlib.Path("data/working").mkdir(parents=True, exist_ok=True)\nbase_path = "data/raw/ratings.csv"\nfb_path   = "data/feedback/ratings_feedback.csv"\nout_path  = "data/working/ratings_merged.csv"\nbase = pd.read_csv(base_path)\nif os.path.exists(fb_path):\n    fb = pd.read_csv(fb_path)\n    df = pd.concat([base[[\'userId\',\'movieId\',\'rating\',\'timestamp\']], fb], ignore_index=True)\nelse:\n    df = base\ndf.to_csv(out_path, index=False)\nprint(f"Wrote merged ratings to {out_path} (rows={len(df)})")\nPY']
+[2025-09-16T14:02:24.183+0000] {subprocess.py:86} INFO - Output:
+[2025-09-16T14:02:25.858+0000] {subprocess.py:93} INFO - Wrote merged ratings to data/working/ratings_merged.csv (rows=100840)
+[2025-09-16T14:02:25.916+0000] {subprocess.py:97} INFO - Command exited with return code 0
+[2025-09-16T14:02:25.917+0000] {taskinstance.py:441} INFO - ::group::Post task execution logs
+[2025-09-16T14:02:25.928+0000] {taskinstance.py:1206} INFO - Marking task as SUCCESS. dag_id=nightly_retrain_als, task_id=merge_feedback, run_id=scheduled__2025-09-15T00:15:00+00:00, execution_date=20250915T001500, start_date=20250916T140224, end_date=20250916T140225
+[2025-09-16T14:02:25.947+0000] {local_task_job_runner.py:243} INFO - Task exited with return code 0
+[2025-09-16T14:02:25.958+0000] {taskinstance.py:3503} INFO - 1 downstream tasks scheduled from follow-on schedule check
+[2025-09-16T14:02:25.960+0000] {local_task_job_runner.py:222} INFO - ::endgroup::

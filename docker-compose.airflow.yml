@@ -1,10 +1,38 @@
-version: "3.8"
+# docker-compose.airflow.yml
 services:
   airflow-webserver:
+    image: local/airflow-dockercli:2.9.3
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow   # installs docker + compose plugin in the Airflow image
+    command: webserver
     environment:
-      AIRFLOW__CORE__EXECUTOR: SequentialExecutor   # was LocalExecutor
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       REPO_DIR: /opt/airflow/repo
+      REPO_DIR_HOST: /Users/Marc/Documents/GitHub/Recommender_systems_with_Pyspark
+    user: "0:0"                        # lets Airflow hit the Docker socket
+    ports: ["8080:8080"]
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - .:/opt/airflow/repo
+      - /var/run/docker.sock:/var/run/docker.sock
+      - airflow_home:/opt/airflow
+
   airflow-scheduler:
+    image: local/airflow-dockercli:2.9.3   # reuse the image built above
+    command: scheduler
     environment:
-      AIRFLOW__CORE__EXECUTOR: SequentialExecutor   # was LocalExecutor
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       REPO_DIR: /opt/airflow/repo
+      REPO_DIR_HOST: /Users/Marc/Documents/GitHub/Recommender_systems_with_Pyspark
+    user: "0:0"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - .:/opt/airflow/repo
+      - /var/run/docker.sock:/var/run/docker.sock
+      - airflow_home:/opt/airflow
+
+volumes:
+  airflow_home: {}
