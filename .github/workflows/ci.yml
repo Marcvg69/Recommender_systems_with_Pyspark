@@ -7,7 +7,6 @@ on:
 jobs:
   build-test-train:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +29,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      # App/runtime deps (from your requirements.txt if present)
       - name: Install app dependencies
         run: |
           python -m pip install --upgrade pip
@@ -40,10 +38,12 @@ jobs:
             pip install pyspark pandas numpy streamlit
           fi
 
-      # Dev tools are installed explicitly regardless of requirements.txt
       - name: Install dev tools (ruff & pytest)
-        run: |
-          pip install ruff==0.6.8 pytest
+        run: pip install ruff==0.6.8 pytest
+
+      # 👇 NEW: make the repo root importable as a package root
+      - name: Expose source path
+        run: echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
 
       - name: Tool versions (debug)
         run: |
@@ -51,6 +51,12 @@ jobs:
           python -V
           python -m pip --version
           python -m ruff -V
+          python - << 'PY'
+          import os, sys
+          print("PWD:", os.getcwd())
+          print("PYTHONPATH:", os.getenv("PYTHONPATH"))
+          print("sys.path[0:3]:", sys.path[0:3])
+          PY
 
       - name: Lint
         run: python -m ruff check .
