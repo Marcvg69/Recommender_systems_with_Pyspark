@@ -1,154 +1,235 @@
-# streamlit_app.py
+# app/streamlit_app.py
+from __future__ import annotations
+
 from pathlib import Path
+import csv
+import os
+from typing import Optional
 
 import pandas as pd
+import pyspark.sql.functions as F
 import streamlit as st
 from pyspark.ml.recommendation import ALSModel
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql import types as T
+from pyspark.sql import DataFrame, Row, SparkSession
 
-# --- Paths (adjust if your repo differs)
-RATINGS_CSV = "data/raw/ratings.csv"                 # base ratings
-MOVIES_CSV  = "data/raw/movies.csv"                  # movie metadata (movieId,title,genres)
-MODEL_DIR   = "models/als_best"                      # trained model output
-SIMS_DIR    = "data/processed/item_sims"             # precomputed item sims (fallback)
-FEEDBACK_CSV= "data/feedback/ratings_feedback.csv"   # appended feedback
 
-# --- Ensure folders exist
-Path("data/feedback").mkdir(parents=True, exist_ok=True)
+# -----------------------------
+# Spark helpers
+# -----------------------------
+def get_spark(app_name: str = "recsys", memory: str = "2g") -> SparkSession:
+    """
+    Create or get a local SparkSession suitable for the container and CI.
 
-# --- Spark session (reuse)
-@st.cache_resource
-def get_spark():
-    builder = SparkSession.builder.appName("recsys_app")
-    # If you need to point Spark to a specific Java, ensure JAVA_HOME is set in your shell
-    spark = builder.getOrCreate()
-    spark.sparkContext.setLogLevel("WARN")
+    Notes
+    -----
+    * We keep it simple: local[*], no Hive, and a small driver memory cap.
+    * UI is disabled to reduce noise in container logs.
+    """
+    spark = (
+        SparkSession.builder.appName(app_name)
+        .master("local[*]")
+        .config("spark.ui.enabled", "false")
+        .config("spark.driver.memory", memory)
+        .getOrCreate()
+    )
     return spark
+
+
+# -----------------------------
+# Data loading
+# -----------------------------
+def read_movies(spark: SparkSession, path: str) -> DataFrame:
+    return spark.read.csv(path, header=True, inferSchema=True)
+
+
+def read_ratings(spark: SparkSession, base_path: str) -> DataFrame:
+    raw = spark.read.csv(
+        os.path.join(base_path, "ratings.csv"), header=True, inferSchema=True
+    )
+    fb_path = os.path.join("data", "feedback", "ratings_feedback.csv")
+    if Path(fb_path).exists():
+        fb = spark.read.csv(fb_path, header=True, inferSchema=True)
+        raw = raw.unionByName(fb, allowMissingColumns=True)
+    return raw
+
+
+def load_model(model_dir: str) -> Optional[ALSModel]:
+    try:
+        return ALSModel.load(model_dir)
+    except Exception:
+        return None
+
+
+# -----------------------------
+# Recommenders
+# -----------------------------
+def recommend_with_fallback(
+    spark: SparkSession,
+    model_dir: str,
+    movies_df: DataFrame,
+    ratings_df: DataFrame,
+    for_user: int,
+    k: int = 10,
+) -> DataFrame:
+    """
+    Try ALS recommendations. If the user has no factors, fall back to a very
+    simple popularity-based list computed from ratings.
+
+    Returns a Spark DataFrame with columns: movieId, title, score.
+    """
+    model = load_model(model_dir)
+
+    if model is not None:
+        # Is the user present in the trained user factors?
+        has_factors = (
+            model.userFactors.filter(F.col("id") == F.lit(for_user)).limit(1).count() > 0
+        )
+        if has_factors:
+            users = spark.createDataFrame([Row(userId=for_user)])
+            recs = model.recommendForUserSubset(users, k)
+            exploded = recs.select(
+                F.explode("recommendations").alias("rec")
+            ).select(
+                F.col("rec.movieId").alias("movieId"),
+                F.col("rec.rating").alias("score"),
+            )
+            out = (
+                exploded.join(movies_df, on="movieId", how="left")
+                .select("movieId", "title", "score")
+                .orderBy(F.desc("score"))
+            )
+            return out
+
+    # Fallback: most popular (by count and avg rating)
+    agg = (
+        ratings_df.groupBy("movieId")
+        .agg(
+            F.count(F.lit(1)).alias("cnt"),
+            F.avg("rating").alias("avg"),
+        )
+        .withColumn("score", F.col("cnt") * F.col("avg"))
+    )
+    out = (
+        agg.join(movies_df, on="movieId", how="left")
+        .select("movieId", "title", "score")
+        .orderBy(F.desc("score"))
+        .limit(k)
+    )
+    return out
+
+
+# -----------------------------
+# Feedback writing
+# -----------------------------
+def append_feedback(user_id: int, movie_id: int, rating: float) -> Path:
+    """
+    Append a single feedback row to data/feedback/ratings_feedback.csv.
+    Creates the directory and file header if missing.
+    """
+    out_dir = Path("data/feedback")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_csv = out_dir / "ratings_feedback.csv"
+
+    is_new = not out_csv.exists()
+    with out_csv.open("a", newline="") as f:
+        writer = csv.writer(f)
+        if is_new:
+            writer.writerow(["userId", "movieId", "rating", "timestamp"])
+        writer.writerow([user_id, movie_id, rating, int(pd.Timestamp.now().timestamp())])
+    return out_csv
+
+
+# -----------------------------
+# UI
+# -----------------------------
+st.set_page_config(page_title="Movie Recs (ALS + fallback)", layout="wide")
+
+st.title("🎬 Movie Recommendations")
 
 spark = get_spark()
 
-# --- Helpers
-def read_csv_df(spark, path, schema):
-    return spark.read.option("header", True).schema(schema).csv(path)
+# Paths inside the repo/container
+MOVIES_CSV = "data/raw/movies.csv"
+RATINGS_BASE = "data/raw"
+MODEL_DIR = "models/als_best"
+SIMS_DIR = "data/processed/item_sims"  # kept for future use
 
-def load_model():
-    return ALSModel.load(MODEL_DIR)
+# Load base data
+movies_df = read_movies(spark, MOVIES_CSV)
+ratings_df = read_ratings(spark, RATINGS_BASE)
 
-def load_dataframes():
-    ratings_schema = T.StructType([
-        T.StructField("userId", T.IntegerType(), False),
-        T.StructField("movieId", T.IntegerType(), False),
-        T.StructField("rating", T.FloatType(), False),
-        T.StructField("timestamp", T.LongType(), True),
-    ])
-    movies_schema = T.StructType([
-        T.StructField("movieId", T.IntegerType(), False),
-        T.StructField("title", T.StringType(), True),
-        T.StructField("genres", T.StringType(), True),
-    ])
-    ratings = read_csv_df(spark, RATINGS_CSV, ratings_schema).cache()
-    movies  = read_csv_df(spark, MOVIES_CSV,  movies_schema).cache()
-    return ratings, movies
-
-def append_feedback_csv(user_id: int, movie_id: int, rating: float, path: str = FEEDBACK_CSV):
-    p = Path(path)
-    header_needed = not p.exists()
-    with p.open("a", encoding="utf-8") as f:
-        if header_needed:
-            f.write("userId,movieId,rating,timestamp\n")
-        import time
-        f.write(f"{user_id},{movie_id},{rating},{int(time.time())}\n")
-
-def recommend_with_fallback(spark, model_dir, sims_dir, for_user: int, ratings_df, k: int = 10):
-    """
-    Try ALS recommendations; if the user has no factors, fallback to item-item neighbors aggregated from
-    the user's history. If no history at all, return globally similar-to-popular.
-    """
-    model = ALSModel.load(model_dir)
-    user_df = spark.createDataFrame([(for_user,)], "userId INT")
-
-    # Try ALS user subset
-    try:
-        recs = model.recommendForUserSubset(user_df, k)
-        out = recs.select("userId", F.explode("recommendations").alias("rec")) \
-                  .select("userId", F.col("rec.movieId").alias("movieId"),
-                          F.col("rec.rating").alias("score"))
-        return out
-    except Exception:
-        pass
-
-    # Fallback using item-item similarities
-    sims = spark.read.parquet(sims_dir)  # movieId, neighborId, similarity, rank
-    history = ratings_df.filter(F.col("userId") == F.lit(for_user)) \
-                        .select("movieId", "rating")
-    if history.count() == 0:
-        # no history: most-similar-to-popular
-        agg = sims.groupBy("neighborId").agg(F.avg("similarity").alias("score"))
-        return agg.orderBy(F.desc("score")).limit(k) \
-                  .withColumn("userId", F.lit(for_user)) \
-                  .select("userId", F.col("neighborId").alias("movieId"), "score")
-
-    joined = sims.join(history, on="movieId", how="inner") \
-                 .withColumn("weighted", F.col("similarity") * F.col("rating"))
-    scores = joined.groupBy("neighborId").agg(
-        F.sum("weighted").alias("score"),
-        F.max("similarity").alias("max_sim")
-    ).orderBy(F.desc("score"))
-    return scores.select(F.lit(for_user).alias("userId"),
-                         F.col("neighborId").alias("movieId"),
-                         "score").limit(k)
-
-# --- UI
-st.title("🎬 PySpark Recommender")
-
-# Load data
-ratings_df, movies_df = load_dataframes()
-
-# Sidebar: user selection
-user_ids = [r.userId for r in ratings_df.select("userId").distinct().orderBy("userId").limit(5000).collect()]
+# Sidebar controls
+st.sidebar.header("Controls")
+user_ids = [
+    r.userId
+    for r in (
+        ratings_df.select("userId")
+        .distinct()
+        .orderBy("userId")
+        .limit(5000)
+        .collect()
+    )
+]
 default_user = user_ids[0] if user_ids else 1
 user_id = st.sidebar.number_input("User ID", min_value=1, value=default_user, step=1)
-
-k = st.sidebar.slider("How many recommendations?", 5, 30, 10)
+top_k = int(st.sidebar.slider("How many recommendations?", 5, 50, value=10, step=1))
 
 # Show recent ratings for context
-st.subheader("Recent ratings for this user")
-recent = ratings_df.filter(F.col("userId") == F.lit(int(user_id))) \
-                   .orderBy(F.desc("timestamp")).limit(10) \
-                   .join(movies_df, on="movieId", how="left") \
-                   .select("movieId", "title", "rating")
-st.dataframe(recent.toPandas() if recent.count() else pd.DataFrame(columns=["movieId","title","rating"]))
+with st.expander("Recent ratings for the selected user"):
+    recent = (
+        ratings_df.filter(F.col("userId") == F.lit(int(user_id)))
+        .orderBy(F.desc("timestamp"))
+        .limit(25)
+        .join(movies_df, on="movieId", how="left")
+        .select("movieId", "title", "rating")
+    )
+    recent_pd = (
+        recent.toPandas()
+        if recent.count()
+        else pd.DataFrame(columns=["movieId", "title", "rating"])
+    )
+    st.dataframe(recent_pd, use_container_width=True)
 
-# Load model and recommend
-if not Path(MODEL_DIR).exists():
-    st.warning("No trained model found at models/als_best/. Please run the tuner first.")
-else:
-    try:
-        recs = recommend_with_fallback(spark, MODEL_DIR, SIMS_DIR, int(user_id), ratings_df, k=k) \
-               .join(movies_df, on="movieId", how="left") \
-               .select("movieId", "title", "score")
-        st.subheader("Recommendations")
-        st.dataframe(recs.toPandas())
-    except Exception as e:
-        st.error(f"Could not produce recommendations: {e}")
+# Recommend
+st.subheader("Top recommendations")
+recs = recommend_with_fallback(
+    spark=spark,
+    model_dir=MODEL_DIR,
+    movies_df=movies_df,
+    ratings_df=ratings_df,
+    for_user=int(user_id),
+    k=top_k,
+)
+recs_pd = recs.toPandas()
+st.dataframe(recs_pd, use_container_width=True)
 
-# Feedback widget
+# Quick feedback form
 st.subheader("Leave a quick rating")
-with st.form("feedback"):
-    movie_title = st.text_input("Movie title (exact match)", "")
-    rating_val  = st.slider("Your rating", 0.5, 5.0, 3.0, 0.5)
+with st.form("quick_feedback"):
+    movie_title = st.text_input("Movie title (exact match)", value="")
+    score = st.slider("Your rating", min_value=0.5, max_value=5.0, step=0.5, value=4.5)
     submitted = st.form_submit_button("Submit")
-    if submitted:
-        if not movie_title.strip():
-            st.warning("Please enter a movie title.")
+
+if submitted:
+    if not movie_title.strip():
+        st.error("Please enter a movie title.")
+    else:
+        movie_row = (
+            movies_df.filter(F.col("title") == F.lit(movie_title))
+            .select("movieId")
+            .limit(1)
+            .collect()
+        )
+        if not movie_row:
+            st.error("Title not found in movies list.")
         else:
-            # lookup movieId by title
-            movie_row = movies_df.filter(F.col("title") == F.lit(movie_title)).select("movieId").limit(1).collect()
-            if not movie_row:
-                st.error("Title not found in movies list.")
-            else:
-                m_id = int(movie_row[0]["movieId"])
-                append_feedback_csv(int(user_id), m_id, float(rating_val))
-                st.success("Thanks! Saved your feedback to data/feedback/ratings_feedback.csv")
+            mid = int(movie_row[0]["movieId"])
+            path = append_feedback(int(user_id), mid, float(score))
+            st.success(
+                f"Thanks! Saved your feedback to {path.as_posix()}"
+            )
+
+st.caption(
+    "Tip: new feedback is appended immediately. The Airflow DAG can merge it and "
+    "retrain ALS nightly."
+)

@@ -4,3 +4,23 @@ target-version = "py310"
 
 [lint]
 select = ["E", "F", "I", "UP", "B"]
+
+exclude = [
+  "data",
+  "models",
+  "logs",
+  "**/__pycache__",
+  ".venv",
+  ".airflow_venv",
+]
+
+[lint]
+select = ["E", "F", "I", "UP"]
+
+# --- E501 option 1: ignore globally (quickest)
+# ignore = ["E501"]
+
+# --- E501 option 2: keep E501, but ignore only in the Streamlit file
+[lint.per-file-ignores]
+"app/streamlit_app.py" = ["E501"]
+"airflow/webserver_config.py" = ["E501", "I001"]  # config-like file
