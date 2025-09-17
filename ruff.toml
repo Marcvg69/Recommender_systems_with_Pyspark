@@ -1,26 +1,22 @@
-# ruff.toml
+# ruff.toml (single file, single [lint] table)
+
 line-length = 100
 target-version = "py310"
 
-[lint]
-select = ["E", "F", "I", "UP", "B"]
-
-exclude = [
-  "data",
-  "models",
-  "logs",
-  "**/__pycache__",
-  ".venv",
-  ".airflow_venv",
-]
+# Optional: keep noise out of the linter
+extend-exclude = ["data", "models", "logs", ".venv", ".airflow_venv"]
 
 [lint]
+# Core rules: pycodestyle (E/W), pyflakes (F), isort (I), pyupgrade (UP)
 select = ["E", "F", "I", "UP"]
 
-# --- E501 option 1: ignore globally (quickest)
-# ignore = ["E501"]
+# Black compatibility & common false-positives
+ignore = ["E203", "W503"]
 
-# --- E501 option 2: keep E501, but ignore only in the Streamlit file
+[lint.isort]
+combine-as-imports = true
+known-first-party = ["src", "app", "airflow"]
+
 [lint.per-file-ignores]
-"app/streamlit_app.py" = ["E501"]
-"airflow/webserver_config.py" = ["E501", "I001"]  # config-like file
+# Airflow drops a long single line in this generated file; don't fail the build for it
+"airflow/webserver_config.py" = ["E501"]
