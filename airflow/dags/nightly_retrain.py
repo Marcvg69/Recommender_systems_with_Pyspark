@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pendulum
+
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
@@ -67,3 +68,5 @@ python -m src.models.tune_als \
     )
 
     merge_feedback >> tune_and_save
+
+

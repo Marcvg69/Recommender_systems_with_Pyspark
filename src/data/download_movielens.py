@@ -1,4 +1,7 @@
-import argparse, zipfile, io, os, sys
+import argparse
+import io
+import os
+import zipfile
 from urllib.request import urlopen
 
 URL = "https://files.grouplens.org/datasets/movielens/ml-latest-small.zip"

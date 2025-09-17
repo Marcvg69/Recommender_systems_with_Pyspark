@@ -1,11 +1,12 @@
 # streamlit_app.py
-import os
 from pathlib import Path
+
 import pandas as pd
 import streamlit as st
-
-from pyspark.sql import SparkSession, functions as F, types as T
 from pyspark.ml.recommendation import ALSModel
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 # --- Paths (adjust if your repo differs)
 RATINGS_CSV = "data/raw/ratings.csv"                 # base ratings
