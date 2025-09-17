@@ -1,17 +1,15 @@
-# ruff.toml (single file, single [lint] table)
+# ruff.toml (single file)
 
 line-length = 100
 target-version = "py310"
-
-# Optional: keep noise out of the linter
 extend-exclude = ["data", "models", "logs", ".venv", ".airflow_venv"]
 
 [lint]
-# Core rules: pycodestyle (E/W), pyflakes (F), isort (I), pyupgrade (UP)
+# Core rule sets: pycodestyle (E), pyflakes (F), isort (I), pyupgrade (UP)
 select = ["E", "F", "I", "UP"]
 
-# Black compatibility & common false-positives
-ignore = ["E203", "W503"]
+# Black-compat & typical noise
+ignore = ["E203"]  # (Removed W503 to avoid the 'Unknown rule selector' error)
 
 [lint.isort]
 combine-as-imports = true

@@ -1,10 +1,9 @@
 # app/streamlit_app.py
 from __future__ import annotations
 
-from pathlib import Path
 import csv
 import os
-from typing import Optional
+from pathlib import Path
 
 import pandas as pd
 import pyspark.sql.functions as F
@@ -53,7 +52,7 @@ def read_ratings(spark: SparkSession, base_path: str) -> DataFrame:
     return raw
 
 
-def load_model(model_dir: str) -> Optional[ALSModel]:
+def load_model(model_dir: str) -> ALSModel | None:
     try:
         return ALSModel.load(model_dir)
     except Exception:
