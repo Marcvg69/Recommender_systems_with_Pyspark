@@ -21,7 +21,8 @@ venv/
 # Data and models (mounted at runtime)
 data/raw/
 data/processed/
-models/
+models/als/
+models/als_best/
 notebooks/
 *.ipynb
 .ipynb_checkpoints/
