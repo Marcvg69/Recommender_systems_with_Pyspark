@@ -7,14 +7,13 @@ on:
 jobs:
   build-test-train:
     runs-on: ubuntu-latest
-
-    # Make the repo root importable as a package (src/…)
-    env:
-      PYTHONPATH: ${{ github.workspace }}
-      PYTHONUTF8: "1"
+    defaults:
+      run:
+        shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,27 +34,30 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      # App deps first; uses your requirements.txt if present
       - name: Install app dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install "pyspark>=3.4,<3.6" pandas numpy streamlit
+          fi
 
+      # Dev tools installed separately so 'ruff' is always available
       - name: Install dev tools (ruff & pytest)
         run: |
-          python -m pip install ruff==0.6.8 pytest
+          pip install "ruff==0.6.8" "pytest>=7,<9"
 
       - name: Tool versions (debug)
         run: |
           which python; python -V
-          pip --version
-          python - <<'PY'
-          import os, importlib.util
-          print("PYTHONPATH =", os.environ.get("PYTHONPATH"))
-          print("find spec:", importlib.util.find_spec("src.models.tune_als"))
-          PY
+          pip -V
+          python -m ruff --version
 
       - name: Lint
-        run: python -m ruff check .
+        run: |
+          python -m ruff check .
 
       - name: Unit tests
         run: pytest -q
@@ -64,24 +66,26 @@ jobs:
         run: |
           python - << 'PY'
           import os, csv, random, time, pathlib
-          pathlib.Path("data/sample").mkdir(parents=True, exist_ok=True)
+          out = pathlib.Path("data/sample")
+          out.mkdir(parents=True, exist_ok=True)
           movies=[(i, f"Movie {i}", "Drama|Action") for i in range(1,301)]
-          with open("data/sample/movies_sample.csv","w",newline="") as f:
+          with open(out/"movies_sample.csv","w",newline="") as f:
               w=csv.writer(f); w.writerow(["movieId","title","genres"]); w.writerows(movies)
           rows=[]; rng=random.Random(42)
           for u in range(1,51):
               for _ in range(15):
                   rows.append([u, rng.randint(1,300), rng.choice([2.5,3,3.5,4,4.5,5]), int(time.time())])
-          with open("data/sample/ratings_sample.csv","w",newline="") as f:
+          with open(out/"ratings_sample.csv","w",newline="") as f:
               w=csv.writer(f); w.writerow(["userId","movieId","rating","timestamp"]); w.writerows(rows)
-          print("Wrote sample CSVs")
+          print("Wrote sample CSVs to", out)
           PY
 
+      # OPTION B: call the file directly (no PYTHONPATH needed)
       - name: Smoke train (fast)
         env:
           SPARK_DRIVER_MEMORY: 1g
         run: |
-          python -m src.models.tune_als \
+          python src/models/tune_als.py \
             --ratings_csv data/sample/ratings_sample.csv \
             --model_out models/als_best \
             --ranks 8,16 \
@@ -93,6 +97,7 @@ jobs:
             --shuffle_partitions 8
 
       - name: Upload artifacts (model + sims)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: als_smoke_artifacts
