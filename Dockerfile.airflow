@@ -1,6 +1,10 @@
+# Example Dockerfile.airflow
 FROM apache/airflow:2.9.3
+
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      docker.io docker-compose-plugin \
-    && rm -rf /var/lib/apt/lists/*
+# (optional) install docker cli or other OS tools you need for your DAGs
+# RUN apt-get update && apt-get install -y --no-install-recommends docker.io && rm -rf /var/lib/apt/lists/*
+
 USER airflow
+COPY requirements.txt /opt/airflow/requirements.txt
+RUN pip install --no-cache-dir -r /opt/airflow/requirements.txt

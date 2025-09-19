@@ -5,10 +5,14 @@ services:
       dockerfile: Dockerfile
     image: recommender_systems_with_pyspark-app
     working_dir: /app
-    command: bash -lc "streamlit run streamlit_app.py --server.address=0.0.0.0 --server.port=8501"
+    command: bash -lc "streamlit run app/streamlit_app.py --server.address=0.0.0.0 --server.port=8501"
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      - RATINGS_CSV=data/raw/ratings.csv
+      - MOVIES_CSV=data/raw/movies.csv
+      - ALS_MODEL_DIR=models/als_best
+
     ports:
       - "8501:8501"
     volumes:

@@ -1,5 +1,6 @@
 # airflow/dags/nightly_retrain.py
 from __future__ import annotations
+from src.models.train_als import train_and_save_model
 
 import pendulum
 
