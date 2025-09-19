@@ -23,9 +23,20 @@ services:
       - airflow_home:/opt/airflow
 
   airflow-scheduler:
-    image: local/airflow-dockercli:2.9.3
+    image: local/airflow-dockercli:2.9.3  # reuse the image above
     command: scheduler
     environment:
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
       AIRFLOW__CORE__EXECUTOR: "SequentialExecutor"
-      AIRFLOW__DATABASE__SQL_ALCH_
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "sqlite:////opt/airflow/airflow.db"
+      PYTHONPATH: "/opt/airflow:/opt/airflow/repo:/opt/airflow/repo/src"
+      REPO_DIR: "/opt/airflow/repo"
+    user: "0:0"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - .:/opt/airflow/repo
+      - /var/run/docker.sock:/var/run/docker.sock
+      - airflow_home:/opt/airflow
+
+volumes:
+  airflow_home: {}
