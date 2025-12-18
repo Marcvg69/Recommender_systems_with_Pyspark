@@ -1,2 +1,4 @@
 ts_utc,mode,movieId,rating,comment
 2025-09-19T09:23:53Z,mode:weighted_pop,318,2.0,
+2025-09-23T06:48:29Z,mode:cold-start,457,1.0,
+2025-09-25T07:45:38Z,user:1,177593,1.5,
